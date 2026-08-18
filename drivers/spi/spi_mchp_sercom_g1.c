@@ -291,9 +291,8 @@ static int spi_configure(const struct device *dev, const struct spi_config *conf
 	if (SPI_OP_MODE_GET(config->operation) == SPI_OP_MODE_MASTER) {
 
 #ifdef CONFIG_SPI_MCHP_INTER_CHARACTER_SPACE
-		spi_reg_cfg->regs->SPIM.SERCOM_CTRLC =
-			(spi_reg_cfg->regs->SPIM.SERCOM_CTRLC & ~SERCOM_SPIM_CTRLC_ICSPACE_Msk) |
-			SERCOM_SPIM_CTRLC_ICSPACE(CONFIG_SPI_MCHP_INTER_CHARACTER_SPACE);
+		spi->SERCOM_CTRLC = (spi->SERCOM_CTRLC & ~SERCOM_SPI_CTRLC_ICSPACE_Msk) |
+				    SERCOM_SPI_CTRLC_ICSPACE(CONFIG_SPI_MCHP_INTER_CHARACTER_SPACE);
 #endif /* CONFIG_SPI_MCHP_INTER_CHARACTER_SPACE */
 
 		clock_control_get_rate(cfg->spi_clock.clock_dev, cfg->spi_clock.gclk_sys,
@@ -1049,8 +1048,8 @@ static int spi_mchp_init(const struct device *dev)
 		return retval;
 	}
 
-	spi->SERCOM_CTRLA |= SERCOM_SPIM_CTRLA_SWRST_Msk;
-	spi_wait_sync(spi_reg_cfg, SERCOM_SPIM_SYNCBUSY_SWRST_Msk);
+	spi->SERCOM_CTRLA |= SERCOM_SPI_CTRLA_SWRST_Msk;
+	spi_wait_sync(spi_reg_cfg, SERCOM_SPI_SYNCBUSY_SWRST_Msk);
 	/* Disable all SPI Interrupts*/
 	spi->SERCOM_INTENCLR = SERCOM_SPI_INTENCLR_Msk;
 
