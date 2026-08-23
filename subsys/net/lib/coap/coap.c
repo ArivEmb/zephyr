@@ -1472,11 +1472,17 @@ int insert_option(struct coap_packet *cpkt, uint16_t code, const uint8_t *value,
 static int update_descriptive_block(struct coap_block_context *ctx,
 				    int block, int size)
 {
-	size_t new_current = GET_NUM(block) << (MIN(COAP_BLOCK_1024, GET_BLOCK_SIZE(block)) + 4);
+	size_t new_current;
 
 	if (block == -ENOENT) {
 		return 0;
 	}
+
+	if (block < 0) {
+		return -EINVAL;
+	}
+
+	new_current = GET_NUM(block) << (MIN(COAP_BLOCK_1024, GET_BLOCK_SIZE(block)) + 4);
 
 	if (size && ctx->total_size && ctx->total_size != size) {
 		return -EINVAL;
