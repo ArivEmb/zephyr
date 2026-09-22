@@ -574,6 +574,82 @@ ZTEST(net_offloaded_netdev, test_shutdown_during_recv_net_off_impl)
 	offloaded_close(sock);
 }
 
+static K_THREAD_STACK_DEFINE(packet_recv_stack, 2048);
+static struct k_thread packet_recv_thread;
+static bool packet_recv_created;
+static int packet_recv_ret;
+
+static void packet_recv(void *p1, void *p2, void *p3)
+{
+	char buf[OFFLOAD_PAYLOAD_LEN];
+
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
+	packet_recv_ret = zsock_recv(POINTER_TO_INT(p1), buf, sizeof(buf), 0);
+}
+
+ZTEST(net_offloaded_netdev, test_packet_close_during_recv_net_off_impl)
+{
+	struct net_if *test_iface = NET_IF_GET(net_offload_test_impl, 0);
+	struct net_sockaddr_ll addr = {
+		.sll_family = NET_AF_PACKET,
+		.sll_ifindex = net_if_get_by_iface(test_iface),
+	};
+	struct zsock_timeval optval = {
+		.tv_usec = 100000,
+	};
+	int prio = k_thread_priority_get(k_current_get()) + 1;
+	struct net_context *ctx;
+	char state[32];
+	int sock;
+	int ret;
+
+	Z_TEST_SKIP_IFNDEF(CONFIG_NET_SOCKETS_PACKET);
+	Z_TEST_SKIP_IFNDEF(CONFIG_NET_CONTEXT_RCVTIMEO);
+
+	if (arch_num_cpus() > 1) {
+		ztest_test_skip();
+	}
+
+	zassume_true(prio <= K_LOWEST_APPLICATION_THREAD_PRIO, "no lower priority for the reader");
+
+	sock = zsock_socket(NET_AF_PACKET, NET_SOCK_RAW, 0);
+	zassert_true(sock >= 0, "socket() failed (%d)", errno);
+	offload_sock = sock;
+
+	ret = zsock_bind(sock, (struct net_sockaddr *)&addr, sizeof(addr));
+	zassert_ok(ret, "bind() failed (%d)", errno);
+	ret = zsock_setsockopt(sock, ZSOCK_SOL_SOCKET, ZSOCK_SO_RCVTIMEO, &optval, sizeof(optval));
+	zassert_ok(ret, "setsockopt() failed (%d)", errno);
+
+	ctx = zvfs_get_fd_obj(sock, NULL, 0);
+	zassert_not_null(ctx, "no context for socket %d", sock);
+
+	packet_recv_created = true;
+	k_thread_create(&packet_recv_thread, packet_recv_stack,
+			K_THREAD_STACK_SIZEOF(packet_recv_stack), packet_recv, INT_TO_POINTER(sock),
+			NULL, NULL, prio, 0, K_NO_WAIT);
+	k_msleep(10);
+	zassert_not_null(strstr(k_thread_state_str(&packet_recv_thread, state, sizeof(state)),
+				"pending"),
+			 "recv() is not blocked: %s", state);
+
+	offloaded_close(sock);
+	sock = zsock_socket(NET_AF_PACKET, NET_SOCK_RAW, 0);
+	zassert_true(sock >= 0, "socket() failed (%d)", errno);
+	offload_sock = sock;
+	zassume_equal_ptr(zvfs_get_fd_obj(sock, NULL, 0), ctx,
+			  "socket() did not reuse the context");
+
+	zassert_ok(k_thread_join(&packet_recv_thread, K_SECONDS(1)), "recv() did not return");
+	packet_recv_created = false;
+	zassert_equal(packet_recv_ret, -1, "recv() returned %d", packet_recv_ret);
+	zassert_true(net_context_is_used(ctx), "recv() released the new socket's context");
+
+	offloaded_close(sock);
+}
+
 static bool offload_getaddrinfo_called;
 
 static int test_offload_getaddrinfo(const char *node,
@@ -664,6 +740,13 @@ static void net_offloaded_netdev_after(void *fixture)
 			k_thread_abort(&deliver_thread);
 		}
 		deliver_created = false;
+	}
+
+	if (packet_recv_created) {
+		if (k_thread_join(&packet_recv_thread, K_SECONDS(1)) != 0) {
+			k_thread_abort(&packet_recv_thread);
+		}
+		packet_recv_created = false;
 	}
 }
 
