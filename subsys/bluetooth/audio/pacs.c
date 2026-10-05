@@ -142,6 +142,7 @@ static int pacs_gatt_notify(struct bt_conn *conn,
 static void deferred_nfy_work_handler(struct k_work *work);
 
 static K_WORK_DEFINE(deferred_nfy_work, deferred_nfy_work_handler);
+static K_WORK_DELAYABLE_DEFINE(deferred_nfy_retry_work, deferred_nfy_work_handler);
 
 struct pac_records_build_data {
 	struct bt_pacs_read_rsp *rsp;
@@ -1061,11 +1062,7 @@ static int pac_notify(struct bt_conn *conn, enum bt_audio_dir dir)
 
 	k_sem_give(&read_buf_sem);
 
-	if (err == -ENOTCONN) {
-		return 0;
-	} else {
-		return 0;
-	}
+	return err;
 }
 #endif /* CONFIG_BT_PAC_SNK_NOTIFIABLE || CONFIG_BT_PAC_SRC_NOTIFIABLE */
 
@@ -1146,6 +1143,10 @@ static int pacs_gatt_notify(struct bt_conn *conn,
 	err = bt_gatt_notify_cb(conn, &params);
 	if (err != 0) {
 		atomic_clear_bit(pacs.flags, PACS_FLAG_NOTIFY_RDY);
+	}
+
+	if (err == -ENOMEM) {
+		k_work_schedule(&deferred_nfy_retry_work, K_USEC(BT_AUDIO_NOTIFY_RETRY_DELAY_US));
 	}
 
 	if (err != 0 && err != -ENOTCONN) {
