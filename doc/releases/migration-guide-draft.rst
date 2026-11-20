@@ -612,6 +612,14 @@ Networking
   ``ENETUNREACH``, for example by trying the next address or waiting for the interface to be
   configured.
 
+* With :kconfig:option:`CONFIG_NET_SOCKETS_ENABLE_DTLS` and
+  :kconfig:option:`CONFIG_MBEDTLS_SSL_SRV_C` enabled, :c:func:`zsock_poll` now has room for one
+  more ``struct k_poll_event`` per TLS context
+  (:kconfig:option:`CONFIG_NET_SOCKETS_TLS_MAX_CONTEXTS`, at most
+  :kconfig:option:`CONFIG_ZVFS_POLL_MAX`), so that a DTLS server socket can take a second one.
+  Each thread that calls it or :c:func:`zsock_select` needs that many times
+  ``sizeof(struct k_poll_event)`` more stack.
+
 * Network interface driver APIs are now device API classes. Out-of-tree network drivers must define
   their API instances with :c:macro:`DEVICE_API` and use the renamed structs:
 
