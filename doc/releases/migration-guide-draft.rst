@@ -612,6 +612,11 @@ Networking
   ``ENETUNREACH``, for example by trying the next address or waiting for the interface to be
   configured.
 
+* :c:func:`zsock_poll` on a DTLS server socket now wakes for its handshake retransmission timer,
+  so that the server retransmits without the caller polling with a timeout. A DTLS server whose
+  handshake stalls can now report ``POLLHUP`` once its session expires
+  (:kconfig:option:`CONFIG_NET_SOCKETS_DTLS_TIMEOUT`), not only when the next datagram arrives.
+
 * With :kconfig:option:`CONFIG_NET_SOCKETS_ENABLE_DTLS` and
   :kconfig:option:`CONFIG_MBEDTLS_SSL_SRV_C` enabled, :c:func:`zsock_poll` now has room for two
   ``struct k_poll_event`` entries per descriptor, so that a DTLS server socket can take a second
